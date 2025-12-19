@@ -1,15 +1,14 @@
-// MARK: - Views/AddWordView.swift
-
 import SwiftUI
 
-struct AddWordView: View {
+struct WSAddWordSheetFirestore: View {
 
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var wordsVM: WordsViewModel
 
     @State private var word = ""
     @State private var meaning = ""
     @State private var sentence = ""
+
+    var onSave: (String, String, String, String) -> Void
 
     var body: some View {
         NavigationStack {
@@ -19,12 +18,10 @@ struct AddWordView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
-
                 Section("Meaning") {
                     TextField("Turkish meaning", text: $meaning)
                 }
-
-                Section("Example") {
+                Section("Sentence") {
                     TextField("Example sentence", text: $sentence, axis: .vertical)
                         .lineLimit(3...6)
                 }
@@ -36,16 +33,26 @@ struct AddWordView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
-                        Task {
-                            await wordsVM.add(word: word, meaning: meaning, sentence: sentence)
-                            dismiss()
-                        }
+                        onSave(
+                            word.trimmingCharacters(in: .whitespacesAndNewlines),
+                            meaning.trimmingCharacters(in: .whitespacesAndNewlines),
+                            sentence.trimmingCharacters(in: .whitespacesAndNewlines),
+                            dateText()
+                        )
+                        dismiss()
                     }
                     .disabled(word.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                               meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
+    }
+
+    private func dateText() -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MMM d"
+        return f.string(from: Date())
     }
 }
 

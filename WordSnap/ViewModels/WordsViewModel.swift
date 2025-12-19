@@ -1,28 +1,46 @@
-// ✅ 1) WordsViewModel.swift  (DOSYA ADI: WordsViewModel.swift)
-// NOT: Projede "WordsViewModel" diye başka dosya/struct varsa SİL. Tek bir tane olacak.
 
+// ✅ ViewModels/WordsViewModel.swift  (BU DOSYAYI AYNEN YAPIŞTIR)
 import Foundation
-import Combine
-import FirebaseFirestore
 import FirebaseAuth
+import FirebaseFirestore
+import Combine
 
 @MainActor
 final class WordsViewModel: ObservableObject {
 
-    @Published var words: [WordItem] = []
-    @Published var errorMessage: String?
+    @Published var items: [WSWord] = []
+    @Published var errorMessage: String? = nil
+    @Published var isLoading: Bool = false
 
-    private let service = WordsService()
+    private let service = WordsFirestoreService()
     private var listener: ListenerRegistration?
 
+    deinit {
+        listener?.remove()
+    }
+
     func start() {
-        stop()
-        do {
-            listener = try service.listenWords { [weak self] items in
-                self?.words = items
+        guard let uid = Auth.auth().currentUser?.uid else {
+            errorMessage = "Not logged in."
+            items = []
+            return
+        }
+
+        isLoading = true
+        listener?.remove()
+
+        listener = service.listenWords(uid: uid) { [weak self] result in
+            guard let self else { return }
+            Task { @MainActor in
+                self.isLoading = false
+                switch result {
+                case .success(let list):
+                    self.items = list
+                    self.errorMessage = nil
+                case .failure(let err):
+                    self.errorMessage = err.localizedDescription
+                }
             }
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 
@@ -31,12 +49,37 @@ final class WordsViewModel: ObservableObject {
         listener = nil
     }
 
-    func add(word: String, meaning: String, sentence: String) async {
+    func addWord(word: String, meaning: String, sentence: String, dateText: String) async {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            errorMessage = "Not logged in."
+            return
+        }
+
+        let item = WSWord(
+            id: UUID().uuidString,
+            word: word,
+            meaning: meaning,
+            sentence: sentence,
+            dateText: dateText
+        )
+
         do {
-            try await service.addWord(word: word, meaning: meaning, sentence: sentence)
+            try await service.addWord(uid: uid, word: item)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func deleteWord(id: String) async {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            errorMessage = "Not logged in."
+            return
+        }
+
+        do {
+            try await service.deleteWord(uid: uid, id: id)
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 }
-
